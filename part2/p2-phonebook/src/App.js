@@ -1,29 +1,37 @@
-import React, { useState, useEffect } from "react";
-import personService from "./services/persons";
-import "./App.css";
+import React, { useState, useEffect } from 'react';
+import personService from './services/persons';
+import './App.css';
 
-import Filter from "./components/Filter";
-import PersonForm from "./components/PersonForm";
-import Persons from "./components/Persons";
-import Notification from "./components/Notification";
+import Filter from './components/Filter';
+import PersonForm from './components/PersonForm';
+import Persons from './components/Persons';
+import Notification from './components/Notification';
 
 const App = () => {
-  const [persons, setPersons] = useState([{ name: "Loading..." }]);
-  const [newName, setNewName] = useState("");
-  const [newNumber, setNewNumber] = useState("");
-  const [filter, setFilter] = useState("");
+  const [persons, setPersons] = useState([]);
+  const [newName, setNewName] = useState('');
+  const [newNumber, setNewNumber] = useState('');
+  const [filter, setFilter] = useState('');
   const [notificationType, setNotificationType] = useState(null);
   const [notificationMsg, setNotificationMsg] = useState(null);
   const [timeoutId, setTimeoutId] = useState(null);
 
   // RETRIEVE  all of the contact from the phonebook at startup
   useEffect(() => {
-    personService.getAll().then((initialPersons) => setPersons(initialPersons));
+    personService
+      .getAll()
+      .then((initialPersons) =>
+        initialPersons ? setPersons(initialPersons) : null
+      )
+      .catch((e) =>
+        console.log('Error retrieving from server on initial run:', e)
+      );
   }, []);
 
   // CREATE and add a person to the phonebook
   // UPDATE if the person is already added
   // Notify with update
+  // 🛠 Fixed addPerson only add if response is a person
   const addPerson = (e) => {
     e.preventDefault();
     const newPerson = {
@@ -34,17 +42,22 @@ const App = () => {
     // checkDuplicate(newPerson)
     const duplicate = findDuplicate(newPerson);
     // If duplicate, confirm update
-    typeof duplicate !== "undefined"
+    typeof duplicate !== 'undefined'
       ? confirmUpdate(duplicate, newNumber)
       : // : setPersons((prevPersons) => prevPersons.concat(newPerson));
         // If not duplicate, add person, clear inputs, notify
-        personService.create(newPerson).then((resPerson) => {
-          setPersons((prevPersons) => prevPersons.concat(resPerson));
-          setNewName("");
-          setNewNumber("");
-          setFilter("");
-          notify(`🆕 Added ${newPerson.name}`);
-        });
+        personService
+          .create(newPerson)
+          .then((resPerson) => {
+            setNewName('');
+            setNewNumber('');
+            // setFilter('');
+            if (resPerson) {
+              setPersons((prevPersons) => prevPersons.concat(resPerson));
+              notify(`🆕 Added ${newPerson.name}`);
+            }
+          })
+          .catch((e) => console.log('Error from addPerson', e));
   };
 
   // DELETE a person from the phonebook
@@ -58,11 +71,12 @@ const App = () => {
             notify(`👋 Deleted ${name}`);
           })
           .catch((e) => {
-            console.log("Error deleting person", e);
+            // No longer the expected error after backend modification
+            console.log('Error deleting person', e);
             setPersons((prevPersons) => prevPersons.filter((p) => p.id !== id));
             notify(
               `🚫 Information of ${name} has already been removed from server`,
-              "error"
+              'error'
             );
           })
       : null;
@@ -114,13 +128,17 @@ const App = () => {
   const sanitizeString = (string) => string.toLowerCase().trim();
 
   // Array of persons used to display (filtered or unfiltered)
-  const toDisplay = persons.filter(
-    (person) =>
-      sanitizeString(person.name).indexOf(`${sanitizeString(filter)}`) !== -1
-  );
+  // 🛠 Check that person actually exists first, otherwise return empty array to allow following .map's to work
+  const toDisplay = persons
+    ? persons.filter(
+        (person) =>
+          sanitizeString(person.name).indexOf(`${sanitizeString(filter)}`) !==
+          -1
+      )
+    : [];
 
   // Clear previous notifications and notify user with a message and type
-  const notify = (msg, type = "success") => {
+  const notify = (msg, type = 'success') => {
     clearTimeout(timeoutId);
     setNotificationType(type);
     setNotificationMsg(msg);
@@ -153,23 +171,28 @@ const App = () => {
       />
 
       <h3>Numbers</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Number</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <Persons
-            persons={toDisplay}
-            filter={filter}
-            removePerson={removePerson}
-            sanitizeString={sanitizeString}
-          />
-        </tbody>
-      </table>
+      {/* Show loading while trying to retrieve persons/contacts  */}
+      {!persons.length ? (
+        <em>．．．Connecting to server．．．</em>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Number</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <Persons
+              persons={toDisplay}
+              filter={filter}
+              removePerson={removePerson}
+              sanitizeString={sanitizeString}
+            />
+          </tbody>
+        </table>
+      )}
     </div>
   );
 };
