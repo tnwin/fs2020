@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 /**
  * Form component to add name and number
@@ -21,6 +21,7 @@ const PersonForm = ({
               onChange={handleNameInput}
               placeholder="New name or update"
               required
+              maxLength="30"
             />
           </td>
         </tr>
@@ -32,6 +33,7 @@ const PersonForm = ({
               onChange={handleNumberInput}
               placeholder="+358 (0) 2941 911"
               pattern="^[+]{0,1}[(\)\-\s\./0-9]*$"
+              maxLength="30"
             />
           </td>
         </tr>
