@@ -15,17 +15,29 @@ const App = () => {
   const [notificationType, setNotificationType] = useState(null);
   const [notificationMsg, setNotificationMsg] = useState(null);
   const [timeoutId, setTimeoutId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // RETRIEVE  all of the contact from the phonebook at startup
   useEffect(() => {
     personService
       .getAll()
-      .then((initialPersons) =>
-        initialPersons ? setPersons(initialPersons) : null
-      )
+      .then((resInitialPersons) => {
+        // Case cannot connect to server
+        if (
+          typeof resInitialPersons === 'string' &&
+          resInitialPersons.includes('Proxy error')
+        )
+          return notify('🚫 Cannot connect to server.', 'error');
+        else if (resInitialPersons) {
+          setPersons(resInitialPersons);
+          setIsLoading(false);
+        }
+      })
       .catch((e) =>
-        console.log('Error retrieving from server on initial run:', e)
+        console.log('Error retrieving from server on initial run:', e),
       );
+    // Disable b/c also using notify() outside of useEffect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // CREATE and add a person to the phonebook
@@ -49,24 +61,45 @@ const App = () => {
         personService
           .create(newPerson)
           .then((resPerson) => {
-            setNewName('');
-            setNewNumber('');
-            // setFilter('');
-            if (resPerson) {
+            // Case cannot connect to server
+            if (
+              typeof resPerson === 'string' &&
+              resPerson.includes('Proxy error')
+            )
+              return notify(
+                `🚫 Failed to add ${newPerson.name} ${newPerson.number}. Cannot connect to server. Refreshing will prevent you from viewing the phonebook.`,
+                'error',
+              );
+
+            // Case receives error
+            if (resPerson.error)
+              return notify(`🚫 ${resPerson.error}`, 'error');
+
+            // Case receives (person) object
+            if (typeof resPerson === 'object') {
               setPersons((prevPersons) => prevPersons.concat(resPerson));
               notify(`🆕 Added ${newPerson.name}`);
+              setNewName('');
+              setNewNumber('');
             }
           })
-          .catch((e) => console.log('Error from addPerson', e));
+          .catch((err) => {
+            console.log('Error from addPerson', err);
+          });
   };
 
   // DELETE a person from the phonebook
   // Notify with success or error
   const removePerson = (id, name) =>
-    window.confirm(`🚨 Delete ${name} ?`)
+    window.confirm(`🚨 Delete ${name.replace(/\s+/g, ' ')} ?`)
       ? personService
           .remove(id)
-          .then(() => {
+          .then((res) => {
+            if (typeof res === 'string' && res.includes('Proxy error'))
+              return notify(
+                `🚫 Failed to delete ${name}. Cannot connect to server. Refreshing will prevent you from viewing the phonebook.`,
+                'error',
+              );
             setPersons((prevPersons) => prevPersons.filter((p) => p.id !== id));
             notify(`👋 Deleted ${name}`);
           })
@@ -76,7 +109,7 @@ const App = () => {
             setPersons((prevPersons) => prevPersons.filter((p) => p.id !== id));
             notify(
               `🚫 Information of ${name} has already been removed from server`,
-              'error'
+              'error',
             );
           })
       : null;
@@ -110,20 +143,55 @@ const App = () => {
   // Call updatePerson with the updated inputted phone number ***
   const confirmUpdate = (person, newNumber) =>
     window.confirm(
-      `🚨 ${person.name} is already added to phonebook, replace the old number with this new one?`
+      `🚨 ${person.name} is already added to phonebook, replace the old number with this new one?`,
     )
       ? updatePerson({ ...person, number: newNumber })
       : null;
 
   // Update the existing person with new inputted phone number
   const updatePerson = (person) =>
-    personService.update(person).then((updatedPerson) => {
-      setPersons((prevPersons) =>
-        prevPersons.map((p) => (p.id === person.id ? updatedPerson : p))
-      );
-      notify(`🆙 Updated ${updatedPerson.name}  with ${updatedPerson.number}`);
+    personService.update(person).then((resUpdatedPerson) => {
+      // Case cannot connect server
+      if (
+        typeof resUpdatedPerson === 'string' &&
+        resUpdatedPerson.includes('Proxy error')
+      )
+        return notify(
+          `🚫 Failed to update ${person.name}. Cannot connect to server. Refreshing will prevent you from viewing the phonebook.`,
+          'error',
+        );
+      // if (!resUpdatedPerson) return null; // return null when response is not a person
+      // Case number validation error when updating
+      if (resUpdatedPerson.error)
+        notify(`🚫 ${resUpdatedPerson.error}`, 'error');
+      // Case normal update
+      else if (typeof resUpdatedPerson === 'object') {
+        setPersons((prevPersons) =>
+          prevPersons.map((p) => (p.id === person.id ? resUpdatedPerson : p)),
+        );
+        notify(
+          `🆙 Updated ${resUpdatedPerson.name}  with ${resUpdatedPerson.number}`,
+        );
+        setNewName('');
+        setNewNumber('');
+      }
     });
-
+  // personService
+  //   .create(newPerson)
+  //   .then((resPerson) => {
+  //     // Case receives error
+  //     if (resPerson.error) notify(`🚫 ${resPerson.error}`, 'error');
+  //     // Case receives (person) object
+  //     else if (typeof resPerson === 'object') {
+  //       setPersons((prevPersons) => prevPersons.concat(resPerson));
+  //       notify(`🆕 Added ${newPerson.name}`);
+  //       setNewName('');
+  //       setNewNumber('');
+  //     }
+  //   })
+  //   .catch((e) => {
+  //     console.log('Error from addPerson', e);
+  //   });
   // Return lowercased and trimmed string
   const sanitizeString = (string) => string.toLowerCase().trim();
 
@@ -133,7 +201,7 @@ const App = () => {
     ? persons.filter(
         (person) =>
           sanitizeString(person.name).indexOf(`${sanitizeString(filter)}`) !==
-          -1
+          -1,
       )
     : [];
 
@@ -146,7 +214,7 @@ const App = () => {
       setTimeout(() => {
         setNotificationType(null);
         setNotificationMsg(null);
-      }, 5000)
+      }, 5000),
     );
   };
 
@@ -172,16 +240,22 @@ const App = () => {
 
       <h3>Numbers</h3>
       {/* Show loading while trying to retrieve persons/contacts  */}
-      {!persons.length ? (
+      {isLoading ? (
         <em>．．．Connecting to server．．．</em>
       ) : (
         <table>
           <thead>
-            <tr>
-              <th>Name</th>
-              <th>Number</th>
-              <th></th>
-            </tr>
+            {!persons.length ? (
+              <strong>
+                <em>The phonebook is empty! What have you done??!!</em>
+              </strong>
+            ) : (
+              <tr>
+                <th>Name</th>
+                <th>Number</th>
+                <th></th>
+              </tr>
+            )}
           </thead>
           <tbody>
             <Persons
