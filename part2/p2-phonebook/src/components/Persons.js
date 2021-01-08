@@ -1,9 +1,9 @@
-import React from "react";
+import React from 'react';
 
 /**
  * Display all of the contacts in the phonebook with a delete button
  */
-const Persons = ({ persons, filter, removePerson, sanitizeString }) => (
+const Persons = ({ persons, removePerson }) => (
   <>
     {persons.map((person) => (
       <tr key={person.name}>
